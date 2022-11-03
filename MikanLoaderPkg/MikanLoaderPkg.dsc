@@ -1,0 +1,31 @@
+# パッケージ記述ファイル
+
+# 基本的な情報を設定
+[Defines]
+  PLATFORM_NAME        = MikanLoaderPkg
+  PLATFORM_GUID        = d3f11f4e-71e9-11e8-a7e1-33fd4f7e5a3e
+  PLATFORM_VERSION     = 0.1
+  DSC_SPECIFICATION     = 0x00010005
+  OUTPUT_DIRECTORY     = Build/MikanLoader$(ARCH) # .elfファイルの出力先 ARCHにはビルドされたアーキテクチャの名前が入る
+  SUPPORTED_ARCHITECTURES = X64 # アーキテクチャを指定
+  BUILD_TARGETS        = DEBUG|RELEASE|NOOPT
+
+# ライブラリの対応を記述 名前|ファイル名
+[LibraryClasses]
+  UefiApplicationEntryPoint|MdePkg/Library/UefiApplicationEntryPoint/UefiApplicationEntryPoint.inf
+  UefiLib|MdePkg/Library/UefiLib/UefiLib.inf
+
+  BaseLib|MdePkg/Library/BaseLib/BaseLib.inf
+  BaseMemoryLib|MdePkg/Library/BaseMemoryLib/BaseMemoryLib.inf
+  DebugLib|MdePkg/Library/BaseDebugLibNull/BaseDebugLibNull.inf
+  DevicePathLib|MdePkg/Library/UefiDevicePathLib/UefiDevicePathLib.inf
+  MemoryAllocationLib|MdePkg/Library/UefiMemoryAllocationLib/UefiMemoryAllocationLib.inf
+  PcdLib|MdePkg/Library/BasePcdLibNull/BasePcdLibNull.inf
+  PrintLib|MdePkg/Library/BasePrintLib/BasePrintLib.inf
+  RegisterFilterLib|MdePkg/Library/RegisterFilterLibNull/RegisterFilterLibNull.inf
+  UefiBootServicesTableLib|MdePkg/Library/UefiBootServicesTableLib/UefiBootServicesTableLib.inf
+  UefiRuntimeServicesTableLib|MdePkg/Library/UefiRuntimeServicesTableLib/UefiRuntimeServicesTableLib.inf
+
+# パッケージをビルド時にビルド対象となるコンポーネントを指定
+[Components]
+  MikanLoaderPkg/Loader.inf
