@@ -4,6 +4,7 @@
 #include  <Library/UefiLib.h>
 #include  <Library/UefiBootServicesTableLib.h>
 #include  <Library/PrintLib.h>
+#include  <Library/MemoryAllocationLib.h>
 #include  <Protocol/LoadedImage.h>
 #include  <Protocol/SimpleFileSystem.h>
 #include  <Protocol/DiskIo2.h>
@@ -127,6 +128,47 @@ EFI_STATUS OpenRootDir(EFI_HANDLE image_handle, EFI_FILE_PROTOCOL** root) {
   return EFI_SUCCESS;
 }
 
+EFI_STATUS OpenGOP(EFI_HANDLE image_handle,
+                   EFI_GRAPHICS_OUTPUT_PROTOCOL** gop) {
+  UINTN num_gop_handles = 0;
+  EFI_HANDLE* gop_handles = NULL;
+  gBS->LocateHandleBuffer(
+      ByProtocol,
+      &gEfiGraphicsOutputProtocolGuid,
+      NULL,
+      &num_gop_handles,
+      &gop_handles);
+
+  gBS->OpenProtocol(
+      gop_handles[0],
+      &gEfiGraphicsOutputProtocolGuid,
+      (VOID**)gop,
+      image_handle,
+      NULL,
+      EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL);
+
+  FreePool(gop_handles);
+
+  return EFI_SUCCESS;
+}
+
+const CHAR16* GetPixelFormatUnicode(EFI_GRAPHICS_PIXEL_FORMAT fmt) {
+  switch (fmt) {
+    case PixelRedGreenBlueReserved8BitPerColor:
+      return L"PixelRedGreenBlueReserved8BitPerColor";
+    case PixelBlueGreenRedReserved8BitPerColor:
+      return L"PixelBlueGreenRedReserved8BitPerColor";
+    case PixelBitMask:
+      return L"PixelBitMask";
+    case PixelBltOnly:
+      return L"PixelBltOnly";
+    case PixelFormatMax:
+      return L"PixelFormatMax";
+    default:
+      return L"InvalidPixelFormat";
+  }
+}
+
 
 EFI_STATUS EFIAPI UefiMain (
     EFI_HANDLE image_handle,
@@ -149,6 +191,26 @@ EFI_STATUS EFIAPI UefiMain (
       // 開いたファイル(memmap)に取得したメモリマップを保存する
       SaveMemoryMap(&memmap, memmap_file);
       memmap_file->Close(memmap_file);
+
+      EFI_GRAPHICS_OUTPUT_PROTOCOL* gop;
+      OpenGOP(image_handle, &gop);
+      Print(L"Resolution: %ux%u, Pixel Format: %s, %u pixels/line\n",
+          gop->Mode->Info->HorizontalResolution,
+          gop->Mode->Info->VerticalResolution,
+          GetPixelFormatUnicode(gop->Mode->Info->PixelFormat),
+          gop->Mode->Info->PixelsPerScanLine);
+      Print(L"Frame Buffer: 0x%01x - 0x%01x, Size: %lu bytes\n",
+          gop->Mode->FrameBufferBase,
+          gop->Mode->FrameBufferBase + gop->Mode->FrameBufferSize,
+          gop->Mode->FrameBufferSize);
+
+      // 画面を白で塗りつぶす
+      // FrameBufferBase...先頭アドレス
+      // FrameBufferSize...全体サイズ
+      UINT8* frame_buffer = (UINT8*)gop->Mode->FrameBufferBase;
+      for (UINTN i = 0; i < gop->Mode->FrameBufferSize; ++i) {
+        frame_buffer[i] = 255;
+      }
     
       // カーネルファイル(kernel.elf)を読み込み専用で開く
       EFI_FILE_PROTOCOL* kernel_file;
@@ -202,13 +264,14 @@ EFI_STATUS EFIAPI UefiMain (
       // 種別がEXECなのでエントリポイントアドレスの値はKernelMain()の実体が置かれたアドレスになる
       UINT64 entry_addr = *(UINT64*)(kernel_base_addr + 24);
 
-      // 引数、戻り値がどちらもvoid型である関数を表すEntryPointType型を作成
-      typedef void EntryPointType(void);
+      // 戻り値がvoid型,引数がUINT64型を2つの関数を表すEntryPointType型を作成
+      typedef void EntryPointType(UINT64, UINT64);
       // 新しく作った型を使ってentry_addrを初期値とするポインタ変数を定義
       EntryPointType* entry_point = (EntryPointType*)entry_addr;
       // 関数の先頭アドレスに引数と戻り値の型情報を組み合わせたので、C言語の関数としてentry_point()を呼び出せる
-      entry_point(); // この行は((EntryPointType*)entry_addr)();でもOK
-
+      // ((EntryPointType*)entry_addr)(gop->Mode->FrameBufferBase, gop->Mode->FrameBufferSize);と書くこともできるが、その際はポインタ変数の作成は不要
+      entry_point(gop->Mode->FrameBufferBase, gop->Mode->FrameBufferSize); 
+      
       Print(L"All done\n");
 
       while (1);
