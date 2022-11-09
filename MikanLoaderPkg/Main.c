@@ -10,6 +10,7 @@
 #include  <Protocol/DiskIo2.h>
 #include  <Protocol/BlockIo.h>
 #include  <Guid/FileInfo.h>
+#include  "frame_buffer_config.hpp" // frame_buffer_config.hppのシンボリックリンクを作成しないとコンパイルエラー
 
 /*
  * メモリマップ構造体
@@ -324,13 +325,33 @@ EFI_STATUS EFIAPI UefiMain (
       // 種別がEXECなのでエントリポイントアドレスの値はKernelMain()の実体が置かれたアドレスになる
       UINT64 entry_addr = *(UINT64*)(kernel_base_addr + 24);
 
-      // 戻り値がvoid型,引数がUINT64型を2つの関数を表すEntryPointType型を作成
-      typedef void EntryPointType(UINT64, UINT64);
+      // UEFIのGOPから取得した情報を、構造体FrameBufferConfigへコピーする
+      struct FrameBufferConfig config = {
+        (UINT8*)gop->Mode->FrameBufferBase,
+        gop->Mode->Info->PixelsPerScanLine,
+        gop->Mode->Info->HorizontalResolution,
+        gop->Mode->Info->VerticalResolution,
+        0
+      };
+      switch (gop->Mode->Info->PixelFormat) {
+        case PixelRedGreenBlueReserved8BitPerColor:
+          config.pixel_format = kPixelRGBResv8BitPerColor;
+          break;
+        case PixelBlueGreenRedReserved8BitPerColor:
+          config.pixel_format = kPixelBGRResv8BitPerColor;
+          break;
+        default:
+          Print(L"Unimplemented pixel format: %d\n", gop->Mode->Info->PixelFormat);
+          Halt();
+      }
+
+      // 戻り値がvoid型,引数に構造体FrameBufferconfigのポインタを取るEntryPointType型を作成
+      typedef void EntryPointType(const struct FrameBufferConfig*);
       // 新しく作った型を使ってentry_addrを初期値とするポインタ変数を定義
       EntryPointType* entry_point = (EntryPointType*)entry_addr;
       // 関数の先頭アドレスに引数と戻り値の型情報を組み合わせたので、C言語の関数としてentry_point()を呼び出せる
-      // ((EntryPointType*)entry_addr)(gop->Mode->FrameBufferBase, gop->Mode->FrameBufferSize);と書くこともできるが、その際はポインタ変数の作成は不要
-      entry_point(gop->Mode->FrameBufferBase, gop->Mode->FrameBufferSize); 
+      // ((EntryPointType*)entry_addr)(&config);と書くこともできるが、その際はポインタ変数の作成は不要
+      entry_point(&config); // 構造体へのポインタをKernelMain()の第1引数に渡す
       
       Print(L"All done\n");
 
